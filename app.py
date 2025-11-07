@@ -1,29 +1,30 @@
 import os
 import json
 import asyncio
+import threading
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
-    Application,
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    filters,
-    ContextTypes,
     ConversationHandler,
+    ContextTypes,
+    filters,
 )
 from dotenv import load_dotenv
 
+# === Load environment variables ===
 load_dotenv()
-
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://digitalmarketingbiz-bot.onrender.com")
 
+# === Telegram bot constants ===
 ASK_NAME, ASK_EMAIL = range(2)
 DATA_FILE = "leads.json"
 
-# ========== Helper Functions ==========
+# === Helper Functions ===
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
@@ -37,7 +38,7 @@ def load_data():
     except:
         return []
 
-# ========== Telegram Bot Handlers ==========
+# === Telegram bot handlers ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome! Please enter your full name:")
     return ASK_NAME
@@ -60,10 +61,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Cancelled.")
     return ConversationHandler.END
 
-
-# ========== Setup Telegram + Flask ==========
+# === Flask setup ===
 flask_app = Flask(__name__)
 
+# === Telegram app setup ===
 application = ApplicationBuilder().token(TOKEN).build()
 
 conv_handler = ConversationHandler(
@@ -76,38 +77,40 @@ conv_handler = ConversationHandler(
 )
 application.add_handler(conv_handler)
 
+# === Shared event loop for both Flask & Telegram ===
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 @flask_app.route("/", methods=["GET"])
 def home():
-    return "🤖 Digital Marketing Bot is live!", 200
-
+    return "🤖 Digital Marketing Bot is running!", 200
 
 @flask_app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    json_update = request.get_json(force=True)
-    update = Update.de_json(json_update, application.bot)
-    asyncio.run(handle_update(update))   # ✅ run inside proper async context
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    asyncio.run_coroutine_threadsafe(handle_update(update), loop)
     return "ok", 200
-
 
 async def handle_update(update: Update):
     if not application.running:
-        await application.initialize()   # ensure it’s initialized
-        await application.start()        # ensure background workers are ready
+        await application.initialize()
+        await application.start()
     await application.process_update(update)
-
 
 async def set_webhook():
     url = f"{RENDER_URL}/{TOKEN}"
     await application.bot.set_webhook(url)
     print(f"✅ Webhook set to {url}")
 
+# === Run everything ===
+def run_bot():
+    loop.run_until_complete(set_webhook())
+    loop.run_forever()
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 if __name__ == "__main__":
-    import threading
-
-    def run_flask():
-        flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
-
-    threading.Thread(target=run_flask).start()
-    asyncio.run(set_webhook())
+    threading.Thread(target=run_bot, daemon=True).start()
+    run_flask()
