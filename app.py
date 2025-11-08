@@ -48,6 +48,7 @@ def is_valid_email(email_str: str) -> bool:
     return re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email_str) is not None
 
 def post_to_sheet(payload: dict, timeout: int = 15) -> bool:
+    """Send JSON data to Google Apps Script endpoint"""
     if not GOOGLE_SHEET_WEBAPP_URL:
         print("⚠️ GOOGLE_SHEET_WEBAPP_URL not set")
         return False
@@ -136,22 +137,25 @@ conv_handler = ConversationHandler(
 )
 application.add_handler(conv_handler)
 
-# ========== Webhook routes ==========
+# ========== Flask webhook routes ==========
 @flask_app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
+    """Sync wrapper for async Telegram update processing"""
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
+        asyncio.run(application.process_update(update))
     except Exception as e:
         print("❌ Webhook processing error:", e)
     return "ok"
 
 @flask_app.route("/")
 def index():
-    return f"✅ Email Validation + Sheet Bot active at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+    """Simple health check page"""
+    return f"✅ Email Validation + Sheet Bot active — {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
 
 # ========== Webhook setup ==========
 async def ensure_webhook():
+    """Make sure webhook is configured correctly"""
     current = await application.bot.get_webhook_info()
     desired = f"{ROOT_URL}/{TOKEN}"
     if current.url != desired:
