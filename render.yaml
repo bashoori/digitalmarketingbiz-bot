@@ -7,6 +7,8 @@ services:
 
     buildCommand: pip install -r requirements.txt
 
+    # 🚫 no startCommand here — Render will read your Procfile instead
+
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
