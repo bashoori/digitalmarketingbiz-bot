@@ -163,7 +163,8 @@ def webhook():
     try:
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
-        loop.create_task(application.process_update(update))
+        # ✅ Thread-safe async call (prevents "Task destroyed" warnings)
+        asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
     except Exception as e:
         print("❌ Webhook error:", e)
     return "ok"
@@ -178,6 +179,7 @@ def set_webhook():
         webhook_url = f"{ROOT_URL.rstrip('/')}/{TELEGRAM_TOKEN}"
         loop.run_until_complete(application.bot.set_webhook(webhook_url))
         print(f"✅ Webhook set to {webhook_url}")
+        print("✅ Bot started successfully — ready to receive messages.")
     except Exception as e:
         print("⚠️ Webhook setup failed:", e)
 
