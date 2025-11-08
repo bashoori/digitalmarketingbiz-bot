@@ -1,29 +1,25 @@
-from __future__ import print_function
-import os.path
-from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from email.mime.text import MIMEText
+import base64
 
-# اسکوپ دسترسی فقط برای ارسال ایمیل
-SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+def send_welcome_email(name, to_email):
+    creds = Credentials.from_authorized_user_file("token.json", ["https://www.googleapis.com/auth/gmail.send"])
+    service = build("gmail", "v1", credentials=creds)
 
-def main():
-    creds = None
-    # اگر قبلاً مجوز داده شده، همون رو استفاده کن
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # در غیر این صورت، درخواست جدید بساز
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        # توکن را ذخیره کن
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-    print("✅ Authorization successful. Token saved to token.json")
+    subject = "Welcome to Digital Marketing Business 🎉"
+    body = (
+        f"Hello {name},\n\n"
+        "Welcome aboard! 🌟\n"
+        "We’re excited to have you here.\n\n"
+        "If this email landed in Spam, please mark it as 'Not Spam' to receive future updates.\n\n"
+        "– Digital Marketing Business Team"
+    )
 
-if __name__ == '__main__':
-    main()
+    message = MIMEText(body)
+    message["to"] = to_email
+    message["subject"] = subject
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    print(f"✅ Sent welcome email to {to_email}")
